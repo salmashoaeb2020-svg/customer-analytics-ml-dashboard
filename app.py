@@ -1,7 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 import joblib
+import os
 
 # ضبط إعدادات الصفحة
 st.set_page_config(
@@ -14,26 +18,40 @@ st.set_page_config(
 st.title("🛒 Smart Customer & Sales Analytics Dashboard")
 st.markdown("An Interactive Machine Learning Application for Customer Segmentation and Sales Prediction.")
 
-# تحميل النماذج والداتا
+# تحميل وتجهيز البيانات والنماذج تلقائياً
 @st.cache_resource
-def load_models():
-    scaler = joblib.load('models/scaler.pkl')
-    cluster_model = joblib.load('models/cluster_model.pkl')
-    reg_model = joblib.load('models/regression_model.pkl')
-    clf_model = joblib.load('models/classification_model.pkl')
-    return scaler, cluster_model, reg_model, clf_model
-
-@st.cache_data
-def load_data():
+def get_trained_models_and_data():
+    # 1. تحميل البيانات
     df = pd.read_csv('Mall_Customers.csv')
     df.columns = ['CustomerID', 'Gender', 'Age', 'Annual_Income', 'Spending_Score']
-    return df
+    
+    # 2. تجهيز البيانات (Scaling)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(df[['Age', 'Annual_Income', 'Spending_Score']])
+    
+    # 3. نموذج Clustering
+    cluster_model = KMeans(n_clusters=5, random_state=42)
+    df['Cluster'] = cluster_model.fit_predict(X_scaled)
+    
+    # 4. نموذج Regression
+    X_reg = df[['Age', 'Annual_Income']]
+    y_reg = df['Spending_Score']
+    reg_model = RandomForestRegressor(random_state=42)
+    reg_model.fit(X_reg, y_reg)
+    
+    # 5. نموذج Classification
+    df['Target_Class'] = (df['Spending_Score'] > 50).astype(int)
+    X_clf = df[['Age', 'Annual_Income']]
+    y_clf = df['Target_Class']
+    clf_model = RandomForestClassifier(random_state=42)
+    clf_model.fit(X_clf, y_clf)
+    
+    return df, scaler, cluster_model, reg_model, clf_model
 
 try:
-    scaler, cluster_model, reg_model, clf_model = load_models()
-    df = load_data()
+    df, scaler, cluster_model, reg_model, clf_model = get_trained_models_and_data()
     
-    # القائمة الجانبية للتنقل بين أجزاء المشروع
+    # القائمة الجانبية للتنقل
     st.sidebar.title("📌 Navigation")
     page = st.sidebar.radio("Go to", ["Overview & Data", "Customer Clustering", "Sales/Spending Regression", "Customer Classification"])
 
@@ -90,5 +108,4 @@ try:
                 st.warning("Result: **Low Spender** 📉")
 
 except Exception as e:
-    st.error(f"Error loading files or models: {e}")
-    st.info("Make sure all .pkl files exist in the 'models/' folder and 'Mall_Customers.csv' is in the main directory.")
+    st.error(f"Error loading application: {e}")
